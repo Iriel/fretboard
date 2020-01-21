@@ -23,28 +23,34 @@ SCALE_NOTES = (
 
 SCALE_OFFSETS = (7, 0, 5, 10, 2, 7)
 
-#surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 300, 200)
-surface = cairo.PDFSurface('cairo.pdf', 8.5 * 72, 11 * 72)
-context = cairo.Context(surface)
-with context:
-    context.set_source_rgb(1, 1, 1)  # White
-    context.paint()
-# Restore the default source which is black.
-#context.move_to(90, 140)
-#context.rotate(-0.5)
-#context.set_font_size(20)
-#context.show_text('Hi from cairo!')
-#
-
-STRING_WIDTH = 20
+STRING_WIDTH = 21
 FRET_HEIGHT = 25
+CELL_DIAMETER = 17.3
 NOTE_FONT_SIZE = 13
 ACCIDENTAL_FONT_SIZE = 9
 
-FRET_COUNT = 12
+FRET_COUNT = 13.2
 STRING_COUNT = 6
 FONT_HEIGHT = -1
 
+NUT_LINE_WIDTH = 3
+FRET_LINE_WIDTH = 1
+SPECIAL_FRET_LINE_WIDTH = 1
+
+SPECIAL_FRET_FILL_COLOR = (0.9, 0.9, 1.0)
+
+STRING_LINE_WIDTH = 1.5
+
+CELL_STYLE_CIRCLE = (1, 0, 1)
+CELL_STYLE_HEX = (6, 0, 1.1)
+CELL_STYLE_BOX = (4, 0.5, 1.3)
+CELL_STYLE_PENT = (5, 0.5, 1.12)
+CELL_STYLE_OCT = (8, 0.5, 1.05)
+CELL_STYLE_SEPT = (7, 0, 1.1) ## Alternate with (7, 0.5, 1.1)
+
+CELL_STYLE = CELL_STYLE_CIRCLE
+
+CELL_STYLES = (CELL_STYLE_CIRCLE, CELL_STYLE_HEX, CELL_STYLE_BOX, CELL_STYLE_PENT, CELL_STYLE_OCT)
 
 def center_note_text(ctx, note):
     ctx.set_font_size(NOTE_FONT_SIZE)
@@ -69,6 +75,9 @@ def center_note_text(ctx, note):
         ctx.show_text(note[1])
 
 
+surface = cairo.PDFSurface('cairo.pdf', 8.5 * 72, 11 * 72)
+context = cairo.Context(surface)
+
 context.set_line_cap(cairo.LINE_CAP_SQUARE)
 context.set_line_join(cairo.LINE_JOIN_MITER)
 
@@ -81,29 +90,41 @@ with context:
 
     context.translate(STRING_WIDTH / 2, FRET_HEIGHT)
 
-#    context.move_to(0, FRET_HEIGHT * (FRET_COUNT + 1))
-    context.set_line_width(4)
+    # Draw the special frets
+    for f in range(1, math.floor(FRET_COUNT) + 1):
+        if SPECIAL_FRETS[(f % 12)]:
+            with context:
+                context.set_source_rgb(*SPECIAL_FRET_FILL_COLOR)
+                context.new_path()
+                context.rectangle(0, FRET_HEIGHT  * (f - 1), STRING_WIDTH * (STRING_COUNT - 1), FRET_HEIGHT)
+                context.fill()
+
+    # Draw the strings
+    with context:
+        context.set_line_width(STRING_LINE_WIDTH)
+        context.set_source_rgb(0.7, 0.7, 0.7)
+
+        for s in range(0, STRING_COUNT):
+            context.move_to(STRING_WIDTH * s, 0)
+            context.rel_line_to(0, FRET_HEIGHT * FRET_COUNT)
+            context.stroke()
+
+    # Draw the nut
+    context.set_line_width(NUT_LINE_WIDTH)
     context.move_to(0, 0)
     context.rel_line_to(STRING_WIDTH * (STRING_COUNT - 1), 0)
     context.stroke()
 
-    context.set_line_width(0.25)
-
-    for s in range(0, STRING_COUNT):
-        context.move_to(STRING_WIDTH * s, 0)
-        context.rel_line_to(0, FRET_HEIGHT * FRET_COUNT)
-        context.stroke()
-
-    context.set_line_width(1.0)
-
-    for f in range(1, FRET_COUNT + 1):
+    # Draw the fret lines
+    for f in range(1, math.floor(FRET_COUNT) + 1):
         if SPECIAL_FRETS[(f % 12)]:
-            context.set_line_width(2.0)
+            context.set_line_width(SPECIAL_FRET_LINE_WIDTH)
         else:
-            context.set_line_width(1.0)
+            context.set_line_width(FRET_LINE_WIDTH)
         context.move_to(0, FRET_HEIGHT * f)
         context.rel_line_to(STRING_WIDTH * (STRING_COUNT - 1), 0)
         context.stroke()
+
 
     context.set_font_size(NOTE_FONT_SIZE)
     (xb, yb, w, h, xa, ya) = context.text_extents('X')
@@ -111,22 +132,51 @@ with context:
 
     for s in range(0, STRING_COUNT):
         note_offset = SCALE_OFFSETS[s]
-        for f in range(0, FRET_COUNT + 1):
+        for f in range(0, math.floor(FRET_COUNT) + 1):
             note = SCALE_NOTES[(f + note_offset) % 12]
 
             cx = STRING_WIDTH * s
             cy = FRET_HEIGHT * (f - 0.5)
             fcy = FONT_HEIGHT - FONT_HEIGHT / 2 + cy
 
-            context.set_line_width(1.5)
+            if len(note) > 1:
+                context.set_line_width(0.5)
+            else:
+                context.set_line_width(1.5)
+            radius = CELL_DIAMETER / 2
+
+
+            style = CELL_STYLES[(s + f + note_offset) % len(CELL_STYLES)]
+            (num_points, point_offset, radius_mul) = style
+
             context.new_path()
-            context.arc(cx, cy, STRING_WIDTH / 2.3, 0, math.pi * 2)
+            if num_points < 3:
+                context.arc(cx, cy, radius * radius_mul, 0, math.pi * 2)
+            else:
+                for p in range(0, num_points):
+                    angle = math.pi * 2.0 * (p + point_offset) / num_points
+                    ox = math.sin(angle) * radius * radius_mul
+                    oy = math.cos(angle) * radius * radius_mul
+                    if p == 0:
+                        context.move_to(cx + ox, cy + oy)
+                    else:
+                        context.line_to(cx + ox, cy + oy)
+                context.close_path()
+
             with context:
-                context.set_source_rgb(0.95, 0.95, 0.95)
+                if note == ('C'):
+                    context.set_source_rgb(0, 0, 0)
+                else:
+                    context.set_source_rgb(0.95, 0.95, 0.95)
                 context.fill_preserve()
 
             context.stroke()
 
-            context.move_to(cx, fcy)
-            center_note_text(context, note)
+            with context:
+                context.move_to(cx, fcy)
+                if len(note) > 1:
+                    context.set_source_rgb(0.7, 0.7, 0.7)
+                if note == ('C'):
+                    context.set_source_rgb(1, 1, 1)
+                center_note_text(context, note)
 
