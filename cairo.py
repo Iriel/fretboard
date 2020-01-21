@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 
+import math
 import cairocffi as cairo
 
+SPECIAL_FRETS = (True, False, False, True,
+                 False, True, False, True,
+                 False, True, False, False)
 
+SCALE_NOTES = (
+    ('A'),
+    ('A', '#'),
+    ('B'),
+    ('C'),
+    ('C', '#'),
+    ('D'),
+    ('D', '#'),
+    ('E'),
+    ('F'),
+    ('F', '#'),
+    ('G'),
+    ('G', '#'))
+
+SCALE_OFFSETS = (7, 0, 5, 10, 2, 7)
 
 #surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 300, 200)
-surface = cairo.PDFSurface('cairo.pdf', 300, 800)
+surface = cairo.PDFSurface('cairo.pdf', 8.5 * 72, 11 * 72)
 context = cairo.Context(surface)
 with context:
     context.set_source_rgb(1, 1, 1)  # White
@@ -18,11 +37,11 @@ with context:
 #
 
 STRING_WIDTH = 20
-FRET_HEIGHT = 30
-NOTE_FONT_SIZE = 20
-ACCIDENTAL_FONT_SIZE = 14
+FRET_HEIGHT = 25
+NOTE_FONT_SIZE = 13
+ACCIDENTAL_FONT_SIZE = 9
 
-FRET_COUNT = 10
+FRET_COUNT = 12
 STRING_COUNT = 6
 FONT_HEIGHT = -1
 
@@ -57,32 +76,57 @@ options = cairo.FontOptions()
 options.set_antialias(cairo.ANTIALIAS_BEST)
 
 with context:
-    context.translate(10, 10)
+    context.translate(36, 36)
+    context.scale(2.0)
 
-    context.move_to(0, FRET_HEIGHT * (FRET_COUNT + 1))
-    context.line_to(0, FRET_HEIGHT)
-    context.line_to(STRING_WIDTH * STRING_COUNT, FRET_HEIGHT)
-    context.line_to(STRING_WIDTH * STRING_COUNT, FRET_HEIGHT * (FRET_COUNT + 1))
+    context.translate(STRING_WIDTH / 2, FRET_HEIGHT)
+
+#    context.move_to(0, FRET_HEIGHT * (FRET_COUNT + 1))
+    context.set_line_width(4)
+    context.move_to(0, 0)
+    context.rel_line_to(STRING_WIDTH * (STRING_COUNT - 1), 0)
     context.stroke()
 
     context.set_line_width(0.25)
 
-    for s in range(1, STRING_COUNT):
-        context.move_to(STRING_WIDTH * s, FRET_HEIGHT)
+    for s in range(0, STRING_COUNT):
+        context.move_to(STRING_WIDTH * s, 0)
         context.rel_line_to(0, FRET_HEIGHT * FRET_COUNT)
         context.stroke()
 
     context.set_line_width(1.0)
 
-    for f in range(2, FRET_COUNT + 2):
+    for f in range(1, FRET_COUNT + 1):
+        if SPECIAL_FRETS[(f % 12)]:
+            context.set_line_width(2.0)
+        else:
+            context.set_line_width(1.0)
         context.move_to(0, FRET_HEIGHT * f)
-        context.rel_line_to(STRING_WIDTH * STRING_COUNT, 0)
+        context.rel_line_to(STRING_WIDTH * (STRING_COUNT - 1), 0)
         context.stroke()
 
     context.set_font_size(NOTE_FONT_SIZE)
     (xb, yb, w, h, xa, ya) = context.text_extents('X')
     FONT_HEIGHT = h
 
-    context.move_to(STRING_WIDTH * 0.5, FONT_HEIGHT + (FRET_HEIGHT - FONT_HEIGHT) / 2)
+    for s in range(0, STRING_COUNT):
+        note_offset = SCALE_OFFSETS[s]
+        for f in range(0, FRET_COUNT + 1):
+            note = SCALE_NOTES[(f + note_offset) % 12]
 
-    center_note_text(context, ('F', '#'))
+            cx = STRING_WIDTH * s
+            cy = FRET_HEIGHT * (f - 0.5)
+            fcy = FONT_HEIGHT - FONT_HEIGHT / 2 + cy
+
+            context.set_line_width(1.5)
+            context.new_path()
+            context.arc(cx, cy, STRING_WIDTH / 2.3, 0, math.pi * 2)
+            with context:
+                context.set_source_rgb(0.95, 0.95, 0.95)
+                context.fill_preserve()
+
+            context.stroke()
+
+            context.move_to(cx, fcy)
+            center_note_text(context, note)
+
